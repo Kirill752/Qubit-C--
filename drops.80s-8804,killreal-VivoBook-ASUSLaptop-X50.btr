@@ -1,0 +1,13 @@
+
+drops:8804 terminated with signal 6 at PC=7f65812969fc SP=7fffbdb02af0.  Backtrace:
+/lib/x86_64-linux-gnu/libc.so.6(pthread_kill+0x12c)[0x7f65812969fc]
+/lib/x86_64-linux-gnu/libc.so.6(raise+0x16)[0x7f6581242476]
+/lib/x86_64-linux-gnu/libc.so.6(abort+0xd3)[0x7f65812287f3]
+./drops(+0x59c0a)[0x55eefa108c0a]
+./drops(+0x1c3483)[0x55eefa272483]
+./drops(+0x193cc7)[0x55eefa242cc7]
+./drops(+0x1a49e5)[0x55eefa2539e5]
+./drops(+0x97c14)[0x55eefa146c14]
+/lib/x86_64-linux-gnu/libc.so.6(+0x29d90)[0x7f6581229d90]
+/lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0x80)[0x7f6581229e40]
+./drops(+0x9b015)[0x55eefa14a015]
