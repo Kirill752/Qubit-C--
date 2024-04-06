@@ -20,7 +20,7 @@ int main(int argc, char *argv[])
    bool pa = false;
    bool fa = false;
    const char *device_config = "cpu";
-   bool visualization = false;
+   bool visualization = true;
    bool algebraic_ceed = false;
 
    OptionsParser args(argc, argv);
@@ -154,9 +154,7 @@ int main(int argc, char *argv[])
    b.AddDomainIntegrator(new DomainLFIntegrator(zero));
    b.Assemble();
 
-   // 10. Define the solution vector x as a parallel finite element grid
-   //     function corresponding to fespace. Initialize x with initial guess of
-   //     zero, which satisfies the boundary conditions.
+   // 10. Задаём сеточную функцию и начальные условия.
    ParGridFunction x(&fespace); // потенциал поля
    ParGridFunction x_grad(fespacegrad); // напряженность поля
    //x = 0.0;
@@ -190,11 +188,24 @@ int main(int argc, char *argv[])
       ess_bdr[8] = 1;
       coeff[0]=&zero;
       x.ProjectBdrCoefficient(coeff, ess_bdr);
+
+      //Первый затвор
+      ess_bdr = 0;
+      ess_bdr[9] = 1;
+      ess_bdr[10] = 0;
+      coeff[0]=&one;
+      x.ProjectBdrCoefficient(coeff, ess_bdr);
+   
+      // Второй затвор
+      ess_bdr = 0;
+      ess_bdr[9] = 0;
+      ess_bdr[10] = 1;
+      coeff[0]=&zero;
+      x.ProjectBdrCoefficient(coeff, ess_bdr);
    } 
 
-   // 11. Set up the parallel bilinear form a(.,.) on the finite element space
-   //     corresponding to the Laplacian operator -Delta, by adding the
-   //     Diffusion domain integrator.
+   // 11. Создаем параллельную билинейную форму a(.,.) в пространстве конечных элементов,
+   // соответствующую оператору Лапласа, добавив DiffusionIntegrator
    ParBilinearForm a(&fespace);
    if (pa) { 
       a.SetAssemblyLevel(AssemblyLevel::PARTIAL); 
@@ -207,10 +218,12 @@ int main(int argc, char *argv[])
       // bit-for-bit deterministic at the cost of somewhat longer run time.
       a.EnableSparseMatrixSorting(Device::IsEnabled());
    }
+   // Задаём диэлектрическую проницаемость среды.
+   // В воздузе eps = 1
+   // В изоляторе eps = 9.4
    Vector eps(pmesh.attributes.Max());
    eps = 1.0;
    eps(2) = eps(5)*9.4;
-   //cout << eps(0) << " " << eps(2);
    PWConstCoefficient eps_func(eps);
    a.AddDomainIntegrator(new DiffusionIntegrator(eps_func));
 
@@ -256,6 +269,7 @@ int main(int argc, char *argv[])
    cg.SetOperator(*A);
    cg.Mult(B, X);
    delete prec;
+
    // 14. Recover the parallel grid function corresponding to X. This is the
    //     local finite element solution on each processor.
    a.RecoverFEMSolution(X, b, x);
@@ -335,7 +349,8 @@ int main(int argc, char *argv[])
       gsol_ofs.precision(8);
       ugrad.Save(gsol_ofs);
    }
-   // 16. Send the solution by socket to a GLVis server.
+
+   // 16. Отпрвляем решение на GLVIS сервер.
    if (visualization)
    {
       char vishost[] = "localhost";
@@ -355,20 +370,6 @@ int main(int argc, char *argv[])
       sol_sock << "grad\n" << pmesh << ugrad << flush;
    } 
 
-/*   {
-   ParaViewDataCollection *pd = NULL;
-   pd = new ParaViewDataCollection("solution", &pmesh);
-   pd->SetPrefixPath("ParaView");
-   pd->RegisterField("solution", &x);
-   pd->RegisterField("grad", ugrad);
-   pd->SetLevelsOfDetail(order);
-   pd->SetDataFormat(VTKFormat::BINARY);
-   pd->SetHighOrderOutput(true);
-   pd->SetCycle(0);
-   pd->SetTime(0.0);
-   pd->Save(); 
-   delete pd;
-}  */
    // 17. Free the used memory.
    if (delete_fec)
    {
