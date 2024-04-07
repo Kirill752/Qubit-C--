@@ -96,17 +96,17 @@ int main(int argc, char *argv[])
     gmsh::model::occ::synchronize(); 
 
      // добавляем физические группы
-    gmsh::model::addPhysicalGroup(2, {33}, 1, "Surface of insulator");
-    gmsh::model::addPhysicalGroup(2, {40}, 2, "Bottom layer");
-    gmsh::model::addPhysicalGroup(3, {1}, 3, "Insulator");
-    gmsh::model::addPhysicalGroup(2, {31, 38}, 4, "Sphere surface_1"); 
-    gmsh::model::addPhysicalGroup(2, {32, 39}, 5, "Sphere surface_2");
-    gmsh::model::addPhysicalGroup(3, {4}, 6, "Surrounding space");
-    gmsh::model::addPhysicalGroup(2, {29}, 7, "Surrounding space surface");
-    gmsh::model::addPhysicalGroup(2, {9, 10, 12, 35}, 8, "Electrode surface_1");
-    gmsh::model::addPhysicalGroup(2, {13, 14, 16, 36}, 9, "Electrode surface_2");
-    gmsh::model::addPhysicalGroup(2, {25, 26, 28, 34}, 10, "Gate surface_1");
-    gmsh::model::addPhysicalGroup(2, {21, 22, 24, 37}, 11, "Gate surface_1");
+    gmsh::model::addPhysicalGroup(2, {31, 38}, 1, "Sphere surface_1"); 
+    gmsh::model::addPhysicalGroup(2, {32, 39}, 2, "Sphere surface_2");
+    gmsh::model::addPhysicalGroup(2, {9, 10, 12, 35}, 3, "Electrode surface_1");
+    gmsh::model::addPhysicalGroup(2, {13, 14, 16, 36}, 4, "Electrode surface_2");
+    gmsh::model::addPhysicalGroup(2, {25, 26, 28, 34}, 5, "Gate surface_1");
+    gmsh::model::addPhysicalGroup(2, {21, 22, 24, 37}, 6, "Gate surface_1");
+    gmsh::model::addPhysicalGroup(2, {33}, 7, "Surface of insulator");
+    gmsh::model::addPhysicalGroup(2, {40}, 8, "Bottom layer");
+    gmsh::model::addPhysicalGroup(3, {1}, 9, "Insulator");
+    gmsh::model::addPhysicalGroup(3, {4}, 10, "Surrounding space");
+    gmsh::model::addPhysicalGroup(2, {29}, 11, "Surrounding space surface");
 
     // создаем поле для сетки
     gmsh::model::mesh::field::add("Distance", 1);

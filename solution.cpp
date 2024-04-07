@@ -5,7 +5,7 @@
 using namespace std;
 using namespace mfem;
 
-void solver(mfem::ParGridFunction& x, mfem::ParMesh& pmesh,  mfem::ParLinearForm& b, mfem::ParBilinearForm& a, mfem::Array<int> ess_tdof_list){
+void solver(int i, int j, mfem::ParGridFunction& x, mfem::ParMesh& pmesh,  mfem::ParLinearForm& b, mfem::ParBilinearForm& a, mfem::Array<int> ess_tdof_list){
 
    // 1. Задаём начальные условия.
     {
@@ -15,53 +15,28 @@ void solver(mfem::ParGridFunction& x, mfem::ParMesh& pmesh,  mfem::ParLinearForm
       Array<int> ess_bdr(pmesh.bdr_attributes.Max());
       Coefficient* coeff[1]; // задаем массив значений, которые хотим присвоить как граничное условие Дирихле
       ess_bdr = 0; // делаем "несущественными" все физические поверхности
-      ess_bdr[3] = 1; // делаем "существенной" поверхность первой капли
-      ess_bdr[4] = 0; // делаем "существенной" поверхность второй капли
-      coeff[0]=&one;
-      x.ProjectBdrCoefficient(coeff, ess_bdr); // Задаем значение "1" на поверхности первой капли
-
-      // Аналогично задаём значение потенциала на второй капле
-      ess_bdr = 0;
-      ess_bdr[3] = 0;
+      //поиск собственных ёмкостей
+      if (i == j){
+      ess_bdr[0] = 1; 
+      ess_bdr[1] = 1; 
+      ess_bdr[2] = 1;
+      ess_bdr[3] = 1;
       ess_bdr[4] = 1;
-      coeff[0] = &one;
-      x.ProjectBdrCoefficient(coeff, ess_bdr);
-
-      //Задаём потенциал на электродах 
-      //Первый электрод
-      ess_bdr = 0;
-      ess_bdr[7] = 1;
-      ess_bdr[8] = 0;
+      ess_bdr[5] = 1;
       coeff[0]=&one;
-      x.ProjectBdrCoefficient(coeff, ess_bdr);
-   
-      // Второй электрод
-      ess_bdr = 0;
-      ess_bdr[7] = 0;
-      ess_bdr[8] = 1;
-      coeff[0]=&one;
-      x.ProjectBdrCoefficient(coeff, ess_bdr);
-
-      //Первый затвор
-      ess_bdr = 0;
-      ess_bdr[9] = 1;
-      ess_bdr[10] = 0;
-      coeff[0]=&one;
-      x.ProjectBdrCoefficient(coeff, ess_bdr);
-   
-      // Второй затвор
-      ess_bdr = 0;
-      ess_bdr[9] = 0;
-      ess_bdr[10] = 1;
-      coeff[0]=&one;
-      x.ProjectBdrCoefficient(coeff, ess_bdr);
+      }
+      else {
+         ess_bdr[j] = 1;
+         coeff[0] = &antione;
+      }
+      x.ProjectBdrCoefficient(coeff, ess_bdr); 
    } 
 
    OperatorPtr A;
    Vector B, X;
    a.FormLinearSystem(ess_tdof_list, x, b, A, X, B);
 
-   // 13.Решаем линейную систему A X = B.
+   // 2.Решаем линейную систему A X = B.
    Solver *prec = NULL;
    prec = new HypreBoomerAMG;
 
@@ -74,10 +49,10 @@ void solver(mfem::ParGridFunction& x, mfem::ParMesh& pmesh,  mfem::ParLinearForm
    cg.Mult(B, X);
    delete prec;
 
-   // 14. Recover the parallel grid function corresponding to X. This is the
-   //     local finite element solution on each processor.
+   // 3. Восстанавливем решение.
    a.RecoverFEMSolution(X, b, x);
 };
+
 
 double Capacity(int num_attr, int order, int dim, ParMesh& pmesh, ParGridFunction& ugrad){
   //Рассчет емкости.
@@ -203,7 +178,7 @@ int main(int argc, char *argv[])
    //    use continuous Lagrange finite elements of the specified order. If
    //    order < 1, we instead use an isoparametric/isogeometric space.
    FiniteElementCollection *fec;
-   FiniteElementCollection *fecgrad = new ND_FECollection(order, dim); // создаём простравнство конечных элементов для градиенат потенциала
+   FiniteElementCollection *fecgrad = new ND_FECollection(order, dim); // создаём простравнство конечных элементов для градиента потенциала
    bool delete_fec;
    if (order > 0)
    {
@@ -326,7 +301,7 @@ int main(int argc, char *argv[])
    // В изоляторе eps = 9.4
    Vector eps(pmesh.attributes.Max());
    eps = 1.0;
-   eps(2) = eps(5)*9.4;
+   eps(9) = eps(10)*9.4;
    PWConstCoefficient eps_func(eps);
    a.AddDomainIntegrator(new DiffusionIntegrator(eps_func));
 
@@ -377,7 +352,7 @@ int main(int argc, char *argv[])
    //     local finite element solution on each processor.
    a.RecoverFEMSolution(X, b, x); */
 
-  solver(x, pmesh, b, a, ess_tdof_list);
+  solver(0, 0, x, pmesh, b, a, ess_tdof_list);
 
   // Расчет напряженности поля.
 
@@ -426,9 +401,38 @@ int main(int argc, char *argv[])
   ones = -1./(4*3.1415);
   // Выводим значение ёмкости в консоль.
   cout << "Ёмкость равна = " << capacity(ones) << endl;  */
-  
-  double cap = Capacity(8, order, dim, pmesh, ugrad);
-  cout << "Ёмкость равна = " << cap << endl;  
+
+
+  // 1 - первая капля
+  // 2 - вторая капля
+  // 3, 4 - электроды
+  // 5, 6 - затворы
+  // cap[i][j]: i - строка; j - столбец
+  double cap[6][6] = {};
+  for (int i = 0; i < 6; i++){
+   for(int j = 0; j < 6; j++){
+      if (j == i){
+         cap[i][j] = Capacity(i, order, dim, pmesh, ugrad);
+      }
+   }
+  }
+
+  solver(1, 0, x, pmesh, b, a, ess_tdof_list);
+  grad.Mult(x, ugrad);
+  ugrad *= -1.0;
+  cap[1][0] = Capacity(1, order, dim, pmesh, ugrad);
+
+  // Вывод матрицы емкости
+  cout << "Матрица емкости: " << endl << endl;  
+   for (int i = 0; i < 6; ++i)
+    {
+        for (int j = 0; j < 6; ++j)
+        {
+            cout.precision(3);
+            cout << cap[i][j] << ' ';
+        }
+        cout << endl;
+    }
 
 
    // 15. Save the refined mesh and the solution in parallel. This output can
