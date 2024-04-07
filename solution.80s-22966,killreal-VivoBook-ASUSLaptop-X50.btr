@@ -1,0 +1,8 @@
+
+solution:22966 terminated with signal 11 at PC=5cca003af69c SP=7fff45097510.  Backtrace:
+./solution(+0x39d69c)[0x5cca003af69c]
+./solution(+0x30902f)[0x5cca0031b02f]
+./solution(+0x99e16)[0x5cca000abe16]
+/lib/x86_64-linux-gnu/libc.so.6(+0x29d90)[0x785939a29d90]
+/lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0x80)[0x785939a29e40]
+./solution(+0x9d295)[0x5cca000af295]
