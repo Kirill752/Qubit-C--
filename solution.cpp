@@ -1,3 +1,7 @@
+// Компиляция
+// mpicxx  -O3 -std=c++11 -I.. -I../../hypre/src/hypre/include ./solution.cpp -o solution -L.. -lmfem -L../../hypre/src/hypre/lib -lHYPRE -L../../metis-4.0 -lmetis -lrt
+
+
 #include "mfem.hpp"
 #include <fstream>
 #include <iostream>
@@ -20,11 +24,6 @@ FiniteElementCollection *FEC_init(int order, int dim, bool delete_fec, int myid,
    {
       fec = pmesh.GetNodes()->OwnFEC();
       delete_fec = false;
-
-      if (myid == 0)
-      {
-         cout << "Using isoparametric FEs: " << fec->Name() << endl;
-      }
    }
    else
    {
@@ -122,7 +121,6 @@ ParGridFunction solver_grad(mfem::ParFiniteElementSpace& fespace, mfem::ParFinit
   //Задём дискретный линейный оператор градиента. 
   ParDiscreteLinearOperator grad(&fespace, &fespacegrad);
   grad.AddDomainInterpolator(new GradientInterpolator);
-  //grad->SetAssemblyLevel(AssemblyLevel::PARTIAL);
   grad.Assemble();
   grad.Finalize();
   //Задаём сеточную функцию, в которую запишем значения напряжености электрического поля
@@ -160,7 +158,22 @@ double Capacity(int num_attr, int order, int dim, ParMesh& pmesh, ParGridFunctio
   return capacity(ones); 
 }; 
 
-
+double slv(int i, int j, int order, int dim, bool delete_fec, int myid, mfem::ParMesh& pmesh, mfem::ParFiniteElementSpace& fespace, mfem::ParFiniteElementSpace& fespacegrad){
+   Array<int> ess_tdof_list;
+   FiniteElementCollection* fec1;
+   FiniteElementCollection* fecgrad1;
+   fec1 = FEC_init(order, dim, delete_fec, myid, pmesh);
+   fecgrad1 = FECgrad_init(order, dim);
+   ParFiniteElementSpace fespace1(&pmesh, fec1);
+   ParFiniteElementSpace fespacegrad1(&pmesh, fecgrad1);
+   ess_tdof_list = ess_tdof_list_init(pmesh, fespace1);
+   ParGridFunction x = solver(i, j, pmesh, fespace1, ess_tdof_list);
+   ParGridFunction ugrad = solver_grad(fespace1, fespacegrad1, x);
+   double cap = Capacity(i, order, dim, pmesh, ugrad);
+   delete fec1;
+   delete fecgrad1;
+   return cap;
+}
 int main(int argc, char *argv[])
 {
    // 1. Инициализируем MPI и HYPRE.
@@ -176,7 +189,7 @@ int main(int argc, char *argv[])
    bool pa = false;
    bool fa = false;
    const char *device_config = "cpu";
-   bool visualization = true;
+   bool visualization = false;
    bool algebraic_ceed = false;
    bool delete_fec;
 
@@ -256,43 +269,144 @@ int main(int argc, char *argv[])
   // 3, 4 - электроды
   // 5, 6 - затворы
   // cap[i][j]: i - строка; j - столбец
-  double cap[6][6] = {};
-  Array<int> ess_tdof_list;
-  FiniteElementCollection* fec;
-  FiniteElementCollection* fecgrad;
-/*   FiniteElementCollection** *fec{new FiniteElementCollection*[6]{}};
-  for (unsigned i{}; i < 6; i++)
+      double cap[6][6] = {}; 
+      FiniteElementCollection* fec;
+      if (order > 0)
    {
-        fec[i] = new FiniteElementCollection[6]{};
+      fec = new H1_FECollection(order, dim);
+      delete_fec = true;
    }
-
-  FiniteElementCollection** *fecgrad{new FiniteElementCollection*[6]{}};
-  for (unsigned i{}; i < 6; i++)
+   else if (pmesh.GetNodes())
    {
-        fecgrad[i] = new FiniteElementCollection[6]{};
-   } */
-
+      fec = pmesh.GetNodes()->OwnFEC();
+      delete_fec = false;
+   }
+   else
+   {
+      fec = new H1_FECollection(order = 1, dim);
+      delete_fec = true;
+   }
+      FiniteElementCollection *fecgrad = new ND_FECollection(order, dim); 
       fec = FEC_init(order, dim, delete_fec, myid, pmesh);
       fecgrad = FECgrad_init(order, dim);
       ParFiniteElementSpace fespace(&pmesh, fec);
       ParFiniteElementSpace fespacegrad(&pmesh, fecgrad);
-      ess_tdof_list = ess_tdof_list_init(pmesh, fespace);
-      ParGridFunction x = solver(0, 0, pmesh, fespace, ess_tdof_list);
+      Array<int> ess_tdof_list;
+      if (pmesh.bdr_attributes.Size())
+   {
+      Array<int> ess_bdr(pmesh.bdr_attributes.Max()); // определяем массив, длина которого равна количеству физических поверхностей
+      ess_bdr = 1; // определяем все физические поверхности как "существенные"
+      fespace.GetEssentialTrueDofs(ess_bdr, ess_tdof_list);
+   }
+/*       ParGridFunction x = solver(0, 0, pmesh, fespace, ess_tdof_list);
       ParGridFunction ugrad = solver_grad(fespace, fespacegrad, x);
-      cap[0][0] = Capacity(0, order, dim, pmesh, ugrad);
-       //Array<int> ess_tdof_list_1;
-/*   FiniteElementCollection *fec_1;
-  FiniteElementCollection *fecgrad_1;
+
+       for (int i = 0; i < 6; ++i)
+    {
+           cap[i][i] = Capacity(i, order, dim, pmesh, ugrad);
+        } */
+      
 
 
-      fec_1 = FEC_init(order, dim, delete_fec, myid, pmesh);
-      fecgrad_1 = FECgrad_init(order, dim);
-      ParFiniteElementSpace fespace_1(&pmesh, fec_1);
-      ParFiniteElementSpace fespacegrad_1(&pmesh, fecgrad_1);
-      ess_tdof_list_1 = ess_tdof_list_init(pmesh, fespace_1);
-      ParGridFunction x1 = solver(0, 0, pmesh, fespace_1, ess_tdof_list_1);
-      ParGridFunction ugrad1 = solver_grad(fespace_1, fespacegrad_1, x1);
-      cap[0][0] = Capacity(0, order, dim, pmesh, ugrad1); */
+
+   ParLinearForm b(&fespace);
+   b.AddDomainIntegrator(new DomainLFIntegrator(zero));
+   b.Assemble();
+   ParGridFunction x(&fespace); // потенциал поля
+   // 11. Создаем параллельную билинейную форму a(.,.) в пространстве конечных элементов,
+   // соответствующую оператору Лапласа, добавив DiffusionIntegrator
+   ParBilinearForm a(&fespace);
+   // Задаём диэлектрическую проницаемость среды.
+   // В воздузе eps = 1
+   // В изоляторе eps = 9.4
+   Vector eps(pmesh.attributes.Max());
+   eps = 1.0;
+   eps(9) = eps(10)*9.4;
+   PWConstCoefficient eps_func(eps);
+   a.AddDomainIntegrator(new DiffusionIntegrator(eps_func));
+   a.Assemble();
+   a.Finalize(); 
+   ParDiscreteLinearOperator grad(&fespace, &fespacegrad);
+   grad.AddDomainInterpolator(new GradientInterpolator);
+   grad.Assemble();
+   grad.Finalize();
+   ParGridFunction ugrad(&fespacegrad);
+   Array<int> ess_bdr(pmesh.bdr_attributes.Max());
+   Coefficient* coeff[1]; // задаем массив значений, которые хотим присвоить как граничное условие Дирихле
+
+
+       for (int i = 0; i < 6; i++){
+         for (int j = 0; j < 6; j++)
+         {
+           if (i!=j){ 
+            ess_bdr = 0; // делаем "несущественными" все физические поверхности
+            ess_bdr[j] = 1;
+            coeff[0] = &antione;
+ 
+           }
+          if (i==j){ 
+            ess_bdr = 0; // делаем "несущественными" все физические поверхности
+           ess_bdr[0] = 1; 
+      ess_bdr[1] = 1; 
+      ess_bdr[2] = 1;
+      ess_bdr[3] = 1;
+      ess_bdr[4] = 1;
+      ess_bdr[5] = 1;
+      coeff[0]=&one;
+           }
+           x = 0; // Вот в чем была проблема. Нужно обнулять сеточную функцию. ЭЩКЕРЕ!!!!!!!!! Я нашел ее.
+           x.ProjectBdrCoefficient(coeff, ess_bdr);  
+   OperatorPtr A;
+   Vector B, X; 
+   a.FormLinearSystem(ess_tdof_list, x, b, A, X, B);
+
+   // 2.Решаем линейную систему A X = B.
+   Solver *prec = NULL;
+   prec = new HypreBoomerAMG;
+
+   CGSolver cg(MPI_COMM_WORLD);
+   cg.SetRelTol(1e-12);
+   cg.SetMaxIter(2000);
+   cg.SetPrintLevel(1);
+   if (prec) { cg.SetPreconditioner(*prec); }
+   cg.SetOperator(*A);
+   cg.Mult(B, X);
+   delete prec;
+   a.RecoverFEMSolution(X, b, x);
+     grad.Mult(x, ugrad);
+  ugrad *= -1.0;
+   cap[i][j] = Capacity(i, order, dim, pmesh, ugrad);
+
+         }
+ 
+      }
+/*             ess_bdr = 0; // делаем "несущественными" все физические поверхности
+            ess_bdr[1] = 1;
+            coeff[0] = &antione;
+            x.ProjectBdrCoefficient(coeff, ess_bdr);  
+   OperatorPtr A;
+   Vector B, X;
+   a.FormLinearSystem(ess_tdof_list, x, b, A, X, B);
+
+   // 2.Решаем линейную систему A X = B.
+   Solver *prec = NULL;
+   prec = new HypreBoomerAMG;
+
+   CGSolver cg(MPI_COMM_WORLD);
+   cg.SetRelTol(1e-12);
+   cg.SetMaxIter(2000);
+   cg.SetPrintLevel(1);
+   if (prec) { cg.SetPreconditioner(*prec); }
+   cg.SetOperator(*A);
+   cg.Mult(B, X);
+   delete prec;
+   a.RecoverFEMSolution(X, b, x);
+     grad.Mult(x, ugrad);
+  ugrad *= -1.0;
+   cap[0][1] = Capacity(0, order, dim, pmesh, ugrad);
+ */
+      delete fec;
+      delete fecgrad;
 
   // Вывод матрицы емкости
   cout << "Матрица емкости: " << endl << endl;  
@@ -301,13 +415,13 @@ int main(int argc, char *argv[])
         for (int j = 0; j < 6; ++j)
         {
             cout.precision(3);
-            cout << cap[i][j] << ' ';
+            cout << setw(4) << cap[i][j] << "|";
         }
         cout << endl;
     }
 
 
-   // 15. Save the refined mesh and the solution in parallel. This output can
+/*    // 15. Save the refined mesh and the solution in parallel. This output can
    //     be viewed later using GLVis: "glvis -np <np> -m mesh -g sol".
     {
       ostringstream mesh_name, sol_name;
@@ -349,21 +463,9 @@ int main(int argc, char *argv[])
       sol_sock << "parallel " << num_procs << " " << myid << "\n";
       sol_sock.precision(8);
       sol_sock << "grad\n" << pmesh << ugrad << flush;
-   }  
+   }   */
 
-   // 17. Free the used memory.
-   if (delete_fec)
-   {
-  /*  for (unsigned i{}; i < 6; i++)
-    {
-        delete[] fec[i];
-        delete[] fecgrad[i];
-    }
-    delete[] fec;
-    delete[] fecgrad; */
-    delete fec;
-    delete fecgrad;
-   }
+
 
    return 0;
 }
