@@ -5,130 +5,16 @@
 #include "mfem.hpp"
 #include <fstream>
 #include <iostream>
+#include <eigen3/Eigen/Dense>
 
 using namespace std;
 using namespace mfem;
+using Eigen::MatrixXd;
+using Eigen::VectorXd;
 
 ConstantCoefficient zero(0.0);
 ConstantCoefficient one(1.0);
 ConstantCoefficient antione(-1.0);
-
-FiniteElementCollection *FEC_init(int order, int dim, bool delete_fec, int myid, mfem::ParMesh& pmesh){
-   FiniteElementCollection *fec;
-   if (order > 0)
-   {
-      fec = new H1_FECollection(order, dim);
-      delete_fec = true;
-   }
-   else if (pmesh.GetNodes())
-   {
-      fec = pmesh.GetNodes()->OwnFEC();
-      delete_fec = false;
-   }
-   else
-   {
-      fec = new H1_FECollection(order = 1, dim);
-      delete_fec = true;
-   }
-   return fec;
-}
-
-FiniteElementCollection *FECgrad_init(int order, int dim){
-      FiniteElementCollection *fecgrad = new ND_FECollection(order, dim); 
-      return fecgrad;
-}
-
-Array<int> ess_tdof_list_init(mfem::ParMesh& pmesh, mfem::ParFiniteElementSpace& fespace){
-      Array<int> ess_tdof_list;
-      if (pmesh.bdr_attributes.Size())
-   {
-      Array<int> ess_bdr(pmesh.bdr_attributes.Max()); // определяем массив, длина которого равна количеству физических поверхностей
-      ess_bdr = 1; // определяем все физические поверхности как "существенные"
-      fespace.GetEssentialTrueDofs(ess_bdr, ess_tdof_list);
-   }
-   return ess_tdof_list;
-}
-
-ParGridFunction solver(int i, int j, mfem::ParMesh& pmesh, mfem::ParFiniteElementSpace& fespace, mfem::Array<int> ess_tdof_list){
-
-   ParLinearForm b(&fespace);
-   b.AddDomainIntegrator(new DomainLFIntegrator(zero));
-   b.Assemble();
-   ParGridFunction x(&fespace); // потенциал поля
-   // 11. Создаем параллельную билинейную форму a(.,.) в пространстве конечных элементов,
-   // соответствующую оператору Лапласа, добавив DiffusionIntegrator
-   ParBilinearForm a(&fespace);
-   // Задаём диэлектрическую проницаемость среды.
-   // В воздузе eps = 1
-   // В изоляторе eps = 9.4
-   Vector eps(pmesh.attributes.Max());
-   eps = 1.0;
-   eps(9) = eps(10)*9.4;
-   PWConstCoefficient eps_func(eps);
-   a.AddDomainIntegrator(new DiffusionIntegrator(eps_func));
-   a.Assemble();
-   a.Finalize(); 
-
-   // 1. Задаём начальные условия.
-    {
-      ConstantCoefficient zero(0.0);
-      ConstantCoefficient one(1.0);
-      ConstantCoefficient antione(-1.0);
-      Array<int> ess_bdr(pmesh.bdr_attributes.Max());
-      Coefficient* coeff[1]; // задаем массив значений, которые хотим присвоить как граничное условие Дирихле
-      ess_bdr = 0; // делаем "несущественными" все физические поверхности
-      //поиск собственных ёмкостей
-      if (i == j){
-      ess_bdr[0] = 1; 
-      ess_bdr[1] = 1; 
-      ess_bdr[2] = 1;
-      ess_bdr[3] = 1;
-      ess_bdr[4] = 1;
-      ess_bdr[5] = 1;
-      coeff[0]=&one;
-      }
-      else {
-         ess_bdr[j] = 1;
-         coeff[0] = &antione;
-      }
-      x.ProjectBdrCoefficient(coeff, ess_bdr); 
-   } 
-
-   OperatorPtr A;
-   Vector B, X;
-   a.FormLinearSystem(ess_tdof_list, x, b, A, X, B);
-
-   // 2.Решаем линейную систему A X = B.
-   Solver *prec = NULL;
-   prec = new HypreBoomerAMG;
-
-   CGSolver cg(MPI_COMM_WORLD);
-   cg.SetRelTol(1e-12);
-   cg.SetMaxIter(2000);
-   cg.SetPrintLevel(1);
-   if (prec) { cg.SetPreconditioner(*prec); }
-   cg.SetOperator(*A);
-   cg.Mult(B, X);
-   delete prec;
-
-   // 3. Восстанавливем решение.
-   a.RecoverFEMSolution(X, b, x);
-   return x;
-};
-
-ParGridFunction solver_grad(mfem::ParFiniteElementSpace& fespace, mfem::ParFiniteElementSpace& fespacegrad, mfem::ParGridFunction& x){
-  // Расчет напряженности поля.
-  //Задём дискретный линейный оператор градиента. 
-  ParDiscreteLinearOperator grad(&fespace, &fespacegrad);
-  grad.AddDomainInterpolator(new GradientInterpolator);
-  grad.Assemble();
-  grad.Finalize();
-  //Задаём сеточную функцию, в которую запишем значения напряжености электрического поля
-  ParGridFunction ugrad(&fespacegrad);
-  grad.Mult(x, ugrad);
-  ugrad *= -1.0;
-  return ugrad;
-}
 
 double Capacity(int num_attr, int order, int dim, ParMesh& pmesh, ParGridFunction& ugrad){
   //Рассчет емкости.
@@ -158,22 +44,6 @@ double Capacity(int num_attr, int order, int dim, ParMesh& pmesh, ParGridFunctio
   return capacity(ones); 
 }; 
 
-double slv(int i, int j, int order, int dim, bool delete_fec, int myid, mfem::ParMesh& pmesh, mfem::ParFiniteElementSpace& fespace, mfem::ParFiniteElementSpace& fespacegrad){
-   Array<int> ess_tdof_list;
-   FiniteElementCollection* fec1;
-   FiniteElementCollection* fecgrad1;
-   fec1 = FEC_init(order, dim, delete_fec, myid, pmesh);
-   fecgrad1 = FECgrad_init(order, dim);
-   ParFiniteElementSpace fespace1(&pmesh, fec1);
-   ParFiniteElementSpace fespacegrad1(&pmesh, fecgrad1);
-   ess_tdof_list = ess_tdof_list_init(pmesh, fespace1);
-   ParGridFunction x = solver(i, j, pmesh, fespace1, ess_tdof_list);
-   ParGridFunction ugrad = solver_grad(fespace1, fespacegrad1, x);
-   double cap = Capacity(i, order, dim, pmesh, ugrad);
-   delete fec1;
-   delete fecgrad1;
-   return cap;
-}
 int main(int argc, char *argv[])
 {
    // 1. Инициализируем MPI и HYPRE.
@@ -189,7 +59,7 @@ int main(int argc, char *argv[])
    bool pa = false;
    bool fa = false;
    const char *device_config = "cpu";
-   bool visualization = false;
+   bool visualization = true;
    bool algebraic_ceed = false;
    bool delete_fec;
 
@@ -287,8 +157,6 @@ int main(int argc, char *argv[])
       delete_fec = true;
    }
       FiniteElementCollection *fecgrad = new ND_FECollection(order, dim); 
-      fec = FEC_init(order, dim, delete_fec, myid, pmesh);
-      fecgrad = FECgrad_init(order, dim);
       ParFiniteElementSpace fespace(&pmesh, fec);
       ParFiniteElementSpace fespacegrad(&pmesh, fecgrad);
       Array<int> ess_tdof_list;
@@ -298,16 +166,6 @@ int main(int argc, char *argv[])
       ess_bdr = 1; // определяем все физические поверхности как "существенные"
       fespace.GetEssentialTrueDofs(ess_bdr, ess_tdof_list);
    }
-/*       ParGridFunction x = solver(0, 0, pmesh, fespace, ess_tdof_list);
-      ParGridFunction ugrad = solver_grad(fespace, fespacegrad, x);
-
-       for (int i = 0; i < 6; ++i)
-    {
-           cap[i][i] = Capacity(i, order, dim, pmesh, ugrad);
-        } */
-      
-
-
 
    ParLinearForm b(&fespace);
    b.AddDomainIntegrator(new DomainLFIntegrator(zero));
@@ -335,93 +193,125 @@ int main(int argc, char *argv[])
    Coefficient* coeff[1]; // задаем массив значений, которые хотим присвоить как граничное условие Дирихле
 
 
-       for (int i = 0; i < 6; i++){
-         for (int j = 0; j < 6; j++)
+   for (int i = 0; i < 6; i++){
+      for (int j = 0; j < 6; j++)
          {
-           if (i!=j){ 
+         if (i!=j){ 
             ess_bdr = 0; // делаем "несущественными" все физические поверхности
             ess_bdr[j] = 1;
             coeff[0] = &antione;
  
            }
-          if (i==j){ 
+         if (i==j){ 
             ess_bdr = 0; // делаем "несущественными" все физические поверхности
-           ess_bdr[0] = 1; 
-      ess_bdr[1] = 1; 
-      ess_bdr[2] = 1;
-      ess_bdr[3] = 1;
-      ess_bdr[4] = 1;
-      ess_bdr[5] = 1;
-      coeff[0]=&one;
+            ess_bdr[0] = 1; 
+            ess_bdr[1] = 1; 
+            ess_bdr[2] = 1;
+            ess_bdr[3] = 1;
+            ess_bdr[4] = 1;
+            ess_bdr[5] = 1;
+            coeff[0]=&one;
            }
-           x = 0; // Вот в чем была проблема. Нужно обнулять сеточную функцию. ЭЩКЕРЕ!!!!!!!!! Я нашел ее.
-           x.ProjectBdrCoefficient(coeff, ess_bdr);  
-   OperatorPtr A;
-   Vector B, X; 
-   a.FormLinearSystem(ess_tdof_list, x, b, A, X, B);
+         x = 0; // Вот в чем была проблема. Нужно обнулять сеточную функцию. ЭЩКЕРЕ!!!!!!!!! Я нашел ее.
+         x.ProjectBdrCoefficient(coeff, ess_bdr);  
+         OperatorPtr A;
+         Vector B, X; 
+         a.FormLinearSystem(ess_tdof_list, x, b, A, X, B);
 
    // 2.Решаем линейную систему A X = B.
-   Solver *prec = NULL;
-   prec = new HypreBoomerAMG;
+         Solver *prec = NULL;
+         prec = new HypreBoomerAMG;
 
-   CGSolver cg(MPI_COMM_WORLD);
-   cg.SetRelTol(1e-12);
-   cg.SetMaxIter(2000);
-   cg.SetPrintLevel(1);
-   if (prec) { cg.SetPreconditioner(*prec); }
-   cg.SetOperator(*A);
-   cg.Mult(B, X);
-   delete prec;
-   a.RecoverFEMSolution(X, b, x);
-     grad.Mult(x, ugrad);
-  ugrad *= -1.0;
-   cap[i][j] = Capacity(i, order, dim, pmesh, ugrad);
-
+         CGSolver cg(MPI_COMM_WORLD);
+         cg.SetRelTol(1e-12);
+         cg.SetMaxIter(2000);
+         cg.SetPrintLevel(1);
+         if (prec) { cg.SetPreconditioner(*prec); }
+         cg.SetOperator(*A);
+         cg.Mult(B, X);
+         delete prec;
+         a.RecoverFEMSolution(X, b, x);
+         grad.Mult(x, ugrad);
+         ugrad *= -1.0;
+         cap[i][j] = Capacity(i, order, dim, pmesh, ugrad);
          }
- 
       }
-/*             ess_bdr = 0; // делаем "несущественными" все физические поверхности
-            ess_bdr[1] = 1;
-            coeff[0] = &antione;
-            x.ProjectBdrCoefficient(coeff, ess_bdr);  
-   OperatorPtr A;
-   Vector B, X;
-   a.FormLinearSystem(ess_tdof_list, x, b, A, X, B);
 
-   // 2.Решаем линейную систему A X = B.
-   Solver *prec = NULL;
-   prec = new HypreBoomerAMG;
+   //  симметризация матрицы емкости
+   for (int i = 0; i < 6; ++i)
+    {
+        for (int j = 0; j < i; ++j)
+        {
+           cap[i][j] = (cap[i][j]+ cap[j][i]/2);
+           cap[j][i] = cap[i][j];
+        }
+        
+    }
 
-   CGSolver cg(MPI_COMM_WORLD);
-   cg.SetRelTol(1e-12);
-   cg.SetMaxIter(2000);
-   cg.SetPrintLevel(1);
-   if (prec) { cg.SetPreconditioner(*prec); }
-   cg.SetOperator(*A);
-   cg.Mult(B, X);
-   delete prec;
-   a.RecoverFEMSolution(X, b, x);
-     grad.Mult(x, ugrad);
-  ugrad *= -1.0;
-   cap[0][1] = Capacity(0, order, dim, pmesh, ugrad);
- */
-      delete fec;
-      delete fecgrad;
-
+    // матрица электростатической индукции
+   double beta[6][6];
+   for (int i = 0; i < 6; ++i)
+    {
+        for (int j = 0; j < 6; ++j)
+        {
+         if (i ==j){
+            beta[i][j] = cap[0][j] + cap[1][j] + cap[2][j] + cap[3][j] + cap[4][j] + cap[5][j];
+         }
+         else if(i!=j){
+            beta[i][j] = -cap[i][j];
+         }
+        }
+    }
+ 
   // Вывод матрицы емкости
-  cout << "Матрица емкости: " << endl << endl;  
+   cout << endl;
+   cout << "Матрица емкости: " << endl << endl;  
    for (int i = 0; i < 6; ++i)
     {
         for (int j = 0; j < 6; ++j)
         {
             cout.precision(3);
-            cout << setw(4) << cap[i][j] << "|";
+            cout  << setw(4) << cap[i][j] << "|";
         }
         cout << endl;
     }
 
+   // Вывод матрицы электростатической индукции
+   cout << endl;
+   cout << "Матрица электростатической индукции': " << endl << endl;  
+   for (int i = 0; i < 6; ++i)
+    {
+        for (int j = 0; j < 6; ++j)
+        {
+            cout.precision(3);
+            cout  << setw(4) << beta[i][j] << "|";
+        }
+        cout << endl;
+    }
+   cout << endl;
+   cout << "Матрица электростатической индукции:" << endl;
+   // Создаем Eigen матрицу
+    MatrixXd beta_eigen(6, 6);
+      for (int i = 0; i < 6; ++i)
+    {
+        for (int j = 0; j < 6; ++j)
+        {
+            beta_eigen(i, j) = beta[i][j];
+        }
+    }
 
-/*    // 15. Save the refined mesh and the solution in parallel. This output can
+    cout << beta_eigen << endl; 
+
+    VectorXd phi_eigen(6);
+    phi_eigen << 1, 1, 1, 1, 1, 1;
+
+    VectorXd q_eigen = beta_eigen*phi_eigen;
+    std::cout << "beta_eigen*phi_eigen =" << std::endl << q_eigen << std::endl;
+
+    cout << endl << "Зарядова энергия равна = " << 0.5*(q_eigen.transpose()*beta_eigen.inverse()*q_eigen) << endl;
+
+
+   // 15. Save the refined mesh and the solution in parallel. This output can
    //     be viewed later using GLVis: "glvis -np <np> -m mesh -g sol".
     {
       ostringstream mesh_name, sol_name;
@@ -463,8 +353,10 @@ int main(int argc, char *argv[])
       sol_sock << "parallel " << num_procs << " " << myid << "\n";
       sol_sock.precision(8);
       sol_sock << "grad\n" << pmesh << ugrad << flush;
-   }   */
+   }  
 
+   delete fec;
+   delete fecgrad;
 
 
    return 0;
