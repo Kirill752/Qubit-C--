@@ -1,3 +1,4 @@
+// g++ -o one_drop one_drop.cpp -lgmsh
 #define M_PI 3.14159265358979323846 /* pi */
 // #include "mfem.hpp"
 #include <fstream>
@@ -24,7 +25,7 @@ int main(int argc, char *argv[])
     double z_drop = h_insulator;              // координата Z капли
 
     // Параметры электродов
-    double r_electrode = r_drop * 5 / 4; // радиус электрода
+    double r_electrode = r_drop * 4 / 3; // радиус электрода
     double l_electrode_gate = 120.0;           // длина затвора
     double l_electrode = 150;
     double el_dist = 1;
@@ -125,7 +126,7 @@ int main(int argc, char *argv[])
     gmsh::model::mesh::field::add("Threshold", 2);
     gmsh::model::mesh::field::setNumber(2, "InField", 1);   // взяли значения параметров сетки из "Поля 1"
     gmsh::model::mesh::field::setNumber(2, "SizeMin", 0.1*r_drop); // минимаьный размер
-    gmsh::model::mesh::field::setNumber(2, "SizeMax", 0.8*r_drop);  // максимальный размер
+    gmsh::model::mesh::field::setNumber(2, "SizeMax", 0.5*r_drop);  // максимальный размер
     gmsh::model::mesh::field::setNumber(2, "DistMin", 0.15);
     gmsh::model::mesh::field::setNumber(2, "DistMax", 0.5);
     gmsh::model::mesh::field::setAsBackgroundMesh(2);

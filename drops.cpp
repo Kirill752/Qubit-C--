@@ -1,20 +1,19 @@
 // g++ -o drops drops.cpp -lgmsh
 
 #define M_PI 3.14159265358979323846 /* pi */
-// #include "mfem.hpp"
+
 #include <fstream>
 #include <iostream>
 #include <set>
 #include "gmsh.h"
 using namespace std;
-// using namespace mfem;
 
 int main(int argc, char *argv[])
 {
 
     // Параметры окружающей среды
-    double R_air = 200.0;   // Радиус сферы окружающей стреды
-    double R_air_1 = 190.0; // Нужен для эллипса
+    double R_air = 210.0;   // Радиус сферы окружающей стреды
+    double R_air_1 = 200.0; // Нужен для эллипса
 
     // Параметры изолятора
     double h_insulator = 200.0; // толщина изолятора
@@ -27,7 +26,7 @@ int main(int argc, char *argv[])
     double z_drop = h_insulator;              // координата Z капли
 
     // Параметры электродов
-    double r_electrode = r_drop * 5 / 4; // радиус электрода
+    double r_electrode = r_drop * 4 / 3; // радиус электрода
     double l_electrode = 140.0;           // длина электрода
     double l_electrode_gate = 120.0;
     double el_dist = 1;
@@ -162,10 +161,10 @@ int main(int argc, char *argv[])
     gmsh::model::addPhysicalGroup(2, {9}, 8, "Bottom layer");
     gmsh::model::addPhysicalGroup(3, {7}, 9, "Insulator");
     gmsh::model::addPhysicalGroup(3, {8}, 10, "Surrounding space");
-    gmsh::model::setVisibility({{3, 8}}, 0);
+    //gmsh::model::setVisibility({{3, 8}}, 0);
     gmsh::model::addPhysicalGroup(2, {10}, 11, "Surrounding space surface");  
-    gmsh::model::setVisibility({{2, 10}}, 0);
-    gmsh::model::setVisibility({{1, 23}}, 0);
+    //gmsh::model::setVisibility({{2, 10}}, 0);
+    //gmsh::model::setVisibility({{1, 23}}, 0);
     
     // создаем поле для сетки
     gmsh::model::mesh::field::add("Distance", 1);
@@ -175,8 +174,8 @@ int main(int argc, char *argv[])
                                                                                // создаём новое поле, которое будет менять размер сетки, опираясь на значение, возвращаемое "Полем 1"
     gmsh::model::mesh::field::add("Threshold", 2);
     gmsh::model::mesh::field::setNumber(2, "InField", 1);   // взяли значения параметров сетки из "Поля 1"
-    gmsh::model::mesh::field::setNumber(2, "SizeMin", 0.1*r_drop); // минимаьный размер
-    gmsh::model::mesh::field::setNumber(2, "SizeMax", 1.5*r_drop);  // максимальный размер
+    gmsh::model::mesh::field::setNumber(2, "SizeMin", r_drop); // минимаьный размер
+    gmsh::model::mesh::field::setNumber(2, "SizeMax", 10*r_drop);  // максимальный размер
     gmsh::model::mesh::field::setNumber(2, "DistMin", 0.15);
     gmsh::model::mesh::field::setNumber(2, "DistMax", 0.5);
     gmsh::model::mesh::field::setAsBackgroundMesh(2);

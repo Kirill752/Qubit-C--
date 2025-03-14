@@ -1,12 +1,13 @@
 // Компиляция
 // mpicxx  -O3 -std=c++11 -I.. -I../../hypre/src/hypre/include ./solution.cpp -o solution -L.. -lmfem -L../../hypre/src/hypre/lib -lHYPRE -L../../metis-4.0 -lmetis -lrt
-
+// sudo mpicxx  -O3 -std=c++11 ./solution.cpp -o solution -lmfem  -lHYPRE -L../../metis-4.0 -lmetis -lrt
 // sudo ldconfig - чтобы правильно находились библиотеки
 #include "mfem.hpp"
 #include <fstream>
 #include <iostream>
 #include <eigen3/Eigen/Dense>
 #include <fstream>
+#include "../../../../../usr/include/x86_64-linux-gnu/mpich/mpi.h"
 
 using namespace std;
 using namespace mfem;
@@ -43,6 +44,7 @@ double Capacity(int num_attr, int order, int dim, ParMesh &pmesh, ParGridFunctio
    GridFunction ones(&fespace_capacity);
    ones = -1. / (4 * 3.1415);
    // Возвращаем значение ёмкости.
+   delete fec_capacity;
    return capacity(ones);
 };
 
@@ -197,7 +199,7 @@ int main(int argc, char *argv[])
    Array<int> ess_bdr(pmesh.bdr_attributes.Max());
    Coefficient *coeff[1]; // задаем массив значений, которые хотим присвоить как граничное условие Дирихле
 
-   for (int i = 0; i < 6; i++)
+    for (int i = 0; i < 6; i++)
    {
       for (int j = 0; j < 6; j++)
       {
@@ -228,23 +230,24 @@ int main(int argc, char *argv[])
          Solver *prec = NULL;
          prec = new HypreBoomerAMG;
 
-         CGSolver cg(MPI_COMM_WORLD);
-         cg.SetRelTol(1e-12);
-         cg.SetMaxIter(2000);
-         cg.SetPrintLevel(1);
-         if (prec)
-         {
-            cg.SetPreconditioner(*prec);
-         }
-         cg.SetOperator(*A);
-         cg.Mult(B, X);
-         delete prec;
+   CGSolver cg(MPI_COMM_WORLD);
+   cg.SetRelTol(1e-12);
+   cg.SetMaxIter(2000);
+   cg.SetPrintLevel(1);
+   if (prec) { cg.SetPreconditioner(*prec); }
+   cg.SetOperator(*A);
+   cg.Mult(B, X);
+   delete prec;
          a.RecoverFEMSolution(X, b, x);
          grad.Mult(x, ugrad);
          ugrad *= -1.0;
          cap[i][j] = Capacity(i, order, dim, pmesh, ugrad);
-      }
+      } 
    }
+
+
+
+
 
    //  симметризация матрицы емкости
    for (int i = 0; i < 6; ++i)
@@ -330,28 +333,21 @@ int main(int argc, char *argv[])
       }
    }   
    fout.close();
-    
 
-            x = 0;
-            ess_bdr = 0; // делаем "несущественными" все физические поверхности
+// Визуализация:
+         x = 0; // Вот в чем была проблема. Нужно обнулять сеточную функцию. ЭЩКЕРЕ!!!!!!!!! Я нашел ее.
+        ess_bdr = 0; // делаем "несущественными" все физические поверхности
             ess_bdr[0] = 1;
-          
             ess_bdr[2] = 1;
-     
             ess_bdr[4] = 1;
- 
+            ess_bdr[5] = 1;
             coeff[0] = &one;
          x.ProjectBdrCoefficient(coeff, ess_bdr);
          ess_bdr = 0; // делаем "несущественными" все физические поверхности
-         
             ess_bdr[1] = 1;
-       
             ess_bdr[3] = 1;
-
-            ess_bdr[5] = 1;
             coeff[0] = &antione;
-
-         x.ProjectBdrCoefficient(coeff, ess_bdr);
+            x.ProjectBdrCoefficient(coeff, ess_bdr);
          OperatorPtr A;
          Vector B, X;
          a.FormLinearSystem(ess_tdof_list, x, b, A, X, B);
@@ -360,17 +356,14 @@ int main(int argc, char *argv[])
          Solver *prec = NULL;
          prec = new HypreBoomerAMG;
 
-         CGSolver cg(MPI_COMM_WORLD);
-         cg.SetRelTol(1e-12);
-         cg.SetMaxIter(2000);
-         cg.SetPrintLevel(1);
-         if (prec)
-         {
-            cg.SetPreconditioner(*prec);
-         }
-         cg.SetOperator(*A);
-         cg.Mult(B, X);
-         delete prec;
+   CGSolver cg(MPI_COMM_WORLD);
+   cg.SetRelTol(1e-12);
+   cg.SetMaxIter(2000);
+   cg.SetPrintLevel(1);
+   if (prec) { cg.SetPreconditioner(*prec); }
+   cg.SetOperator(*A);
+   cg.Mult(B, X);
+   delete prec;
          a.RecoverFEMSolution(X, b, x);
          grad.Mult(x, ugrad);
          ugrad *= -1.0;
