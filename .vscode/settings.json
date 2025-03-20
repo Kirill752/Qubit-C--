@@ -57,6 +57,23 @@
         "stop_token": "cpp",
         "streambuf": "cpp",
         "thread": "cpp",
-        "typeinfo": "cpp"
+        "typeinfo": "cpp",
+        "csignal": "cpp",
+        "any": "cpp",
+        "strstream": "cpp",
+        "bitset": "cpp",
+        "codecvt": "cpp",
+        "condition_variable": "cpp",
+        "list": "cpp",
+        "unordered_set": "cpp",
+        "optional": "cpp",
+        "future": "cpp",
+        "mutex": "cpp",
+        "cfenv": "cpp",
+        "cinttypes": "cpp",
+        "typeindex": "cpp",
+        "valarray": "cpp",
+        "variant": "cpp",
+        "dense": "cpp"
     }
 }
