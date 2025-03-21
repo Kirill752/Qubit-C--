@@ -1,6 +1,0 @@
-\babel@toc {russian}{}\relax 
-\contentsline {chapter}{Введение}{3}{}%
-\contentsline {chapter}{Обзор литературы}{4}{}%
-\contentsline {chapter}{Метод реализации алгоритма рассчёта}{6}{}%
-\contentsline {chapter}{Примеры рассчета}{12}{}%
-\contentsline {chapter}{Итоги работы}{14}{}%
